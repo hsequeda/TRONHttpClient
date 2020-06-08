@@ -330,3 +330,72 @@ func (c *Client) EasyTransferByPrivate(privateKey, toAddress string, amount int)
 		return nil, fmt.Errorf("%s: %s", result.Result.Code, string(b))
 	}
 }
+
+// CreateAccount Create an account. Uses an already activated account to create a new account
+// Note: The expiration time of the http api creation transaction is 1 minute,
+//       so to complete the on-chain, you need to complete gettransactionsign and
+//       broadcasttransaction within 1 minute after the creation.
+func (c *Client) CreateAccount(ownerAddr, accountAddr string, visible bool, permissionID int) (*Transaction, error) {
+	encodeData, err := json.Marshal(
+		map[string]interface{}{
+			"owner_address":   ownerAddr,
+			"account_address": accountAddr,
+			"visible":         visible,
+			"permission_id":   visible,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", testNet+"/wallet/createaccount",
+		bytes.NewBuffer(encodeData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := c.client.CallRetryable(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var tx Transaction
+	err = json.NewDecoder(resp).Decode(&tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tx, err
+}
+
+// GetAccount Query information about an account,Including balances, freezes, votes and time, etc
+func (c *Client) GetAccount(address string, visible bool) (*Account, error) {
+	encodeData, err := json.Marshal(
+		map[string]interface{}{
+			"address": address,
+			"visible": visible,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", testNet+"/wallet/getaccount",
+		bytes.NewBuffer(encodeData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := c.client.CallRetryable(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var account Account
+	err = json.NewDecoder(resp).Decode(&account)
+	if err != nil {
+		return nil, err
+	}
+
+	return &account, err
+}
