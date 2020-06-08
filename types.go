@@ -13,3 +13,8 @@ type Address struct {
 	Address    string `json:"address"`
 	HexAddress string `json:"hexAddress"`
 }
+
+type AddressWithoutPrivKey struct {
+	Base58CheckAddress string `json:"base58checkAddress"`
+	Value              string `json:"value"`
+}
