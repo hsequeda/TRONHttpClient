@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	httpClient "github.com/stdevHsequeda/TRONHttpClient/client"
 	"net/http"
 )
@@ -92,7 +93,7 @@ func (c *Client) GetTxSign(tx *Transaction, privKey string) (*Transaction, error
 }
 
 // BroadcastTx  Broadcast the signed transaction
-func (c *Client) BroadcastTx(tx *Transaction) (*Transaction,error) {
+func (c *Client) BroadcastTx(tx *Transaction) (*Transaction, error) {
 	encodeData, err := json.Marshal(tx)
 	if err != nil {
 		return nil, err
@@ -110,7 +111,7 @@ func (c *Client) BroadcastTx(tx *Transaction) (*Transaction,error) {
 		return nil, err
 	}
 
-   err= json.NewDecoder(resp).Decode(tx)
+	err = json.NewDecoder(resp).Decode(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -144,13 +145,8 @@ func (c *Client) GenerateAddress() (*Address, error) {
 
 // CreateAddress Create address from a specified password string (NOT PRIVATE KEY)
 func (c *Client) CreateAddress(password string) (*AddressWithoutPrivKey, error) {
-	hexPass, err := hex.DecodeString(password)
-	if err != nil {
-		return nil, err
-	}
-
 	encodeData, err := json.Marshal(map[string]string{
-		"value": string(hexPass),
+		"value": hex.EncodeToString([]byte(password)),
 	})
 	if err != nil {
 		return nil, err
@@ -208,11 +204,11 @@ func (c *Client) ValidateAddress(address string) (bool, error) {
 }
 
 // BroadcastHex Broadcast the protobuf encoded transaction hex string after sign
-func (c *Client) BroadcastHex(txHex string) (*Transaction,error){
- 	encodeData, err := json.Marshal(
-      map[string]string{
-         "transaction": txHex,
-      })
+func (c *Client) BroadcastHex(txHex string) (*Transaction, error) {
+	encodeData, err := json.Marshal(
+		map[string]string{
+			"transaction": txHex,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -229,8 +225,8 @@ func (c *Client) BroadcastHex(txHex string) (*Transaction,error){
 		return nil, err
 	}
 
-   var tx Transaction
-   err= json.NewDecoder(resp).Decode(&tx)
+	var tx Transaction
+	err = json.NewDecoder(resp).Decode(&tx)
 	if err != nil {
 		return nil, err
 	}
@@ -238,5 +234,99 @@ func (c *Client) BroadcastHex(txHex string) (*Transaction,error){
 	return &tx, nil
 }
 
+// EasyTransfer Easily transfer from an address using the password string.
+// Only works with accounts created from createAddress,integrated getransactionsign and broadcasttransaction.
+func (c *Client) EasyTransfer(password, toAddress string, amount int) (*Transaction, error) {
+	encodeData, err := json.Marshal(
+		map[string]interface{}{
+			"passPhrase": hex.EncodeToString([]byte(password)),
+			"toAddress":  toAddress,
+			"amount":     amount,
+		})
+	if err != nil {
+		return nil, err
+	}
 
+	req, err := http.NewRequest("POST", testNet+"/wallet/easytransfer",
+		bytes.NewBuffer(encodeData))
+	if err != nil {
+		return nil, err
+	}
 
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := c.client.CallRetryable(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result struct {
+			Ok      bool   `json:"result"`
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		Transaction Transaction `json:"transaction"`
+	}
+	err = json.NewDecoder(resp).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Result.Ok {
+		return &result.Transaction, nil
+	} else {
+		b, err := hex.DecodeString(result.Result.Message)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%s: %s", result.Result.Code, string(b))
+	}
+}
+
+// EasyTransferByPrivate Easily transfer from an address using the private key.
+func (c *Client) EasyTransferByPrivate(privateKey, toAddress string, amount int) (*Transaction, error) {
+	encodeData, err := json.Marshal(
+		map[string]interface{}{
+			"privateKey": privateKey,
+			"toAddress":  toAddress,
+			"amount":     amount,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", testNet+"/wallet/easytransferbyprivate",
+		bytes.NewBuffer(encodeData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := c.client.CallRetryable(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result struct {
+			Ok      bool   `json:"result"`
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		Transaction Transaction `json:"transaction"`
+	}
+	err = json.NewDecoder(resp).Decode(&result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Result.Ok {
+		return &result.Transaction, nil
+	} else {
+		b, err := hex.DecodeString(result.Result.Message)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%s: %s", result.Result.Code, string(b))
+	}
+}
