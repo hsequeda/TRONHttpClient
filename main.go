@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	httpClient "github.com/stdevHsequeda/TRONHttpClient/client"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -55,7 +53,6 @@ func (c *Client) CreateTx(toAddr, ownerAddr string, amount int) (*Transaction, e
 		return nil, err
 	}
 
-	fmt.Printf("%+v \n", tx)
 	return &tx, err
 }
 
@@ -91,37 +88,34 @@ func (c *Client) GetTxSign(tx *Transaction, privKey string) (*Transaction, error
 		return nil, err
 	}
 
-	fmt.Printf("%+v \n", tx)
 	return tx, err
 }
 
 // BroadcastTx  Broadcast the signed transaction
-func (c *Client) BroadcastTx(tx *Transaction) error {
+func (c *Client) BroadcastTx(tx *Transaction) (*Transaction,error) {
 	encodeData, err := json.Marshal(tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", testNet+"/wallet/broadcasttransaction",
 		bytes.NewBuffer(encodeData))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := c.client.CallRetryable(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	b, err := ioutil.ReadAll(resp)
+   err= json.NewDecoder(resp).Decode(tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	fmt.Printf("%s \n", string(b))
-
-	return nil
+	return tx, nil
 }
 
 // GenerateAddress Generates a random private key and address pair. Returns a private key,
@@ -212,3 +206,37 @@ func (c *Client) ValidateAddress(address string) (bool, error) {
 
 	return addr.ok, nil
 }
+
+// BroadcastHex Broadcast the protobuf encoded transaction hex string after sign
+func (c *Client) BroadcastHex(txHex string) (*Transaction,error){
+ 	encodeData, err := json.Marshal(
+      map[string]string{
+         "transaction": txHex,
+      })
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", testNet+"/wallet/broadcasthex",
+		bytes.NewBuffer(encodeData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := c.client.CallRetryable(req)
+	if err != nil {
+		return nil, err
+	}
+
+   var tx Transaction
+   err= json.NewDecoder(resp).Decode(&tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tx, nil
+}
+
+
+
